@@ -1,0 +1,5 @@
+anthropic>=0.116.0
+python-dotenv
+SpeechRecognition
+PyAudio
+pyttsx3
