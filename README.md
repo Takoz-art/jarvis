@@ -17,6 +17,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 Run it:
 python jarvis.py
 Usage
+Push-to-talk (default): py -3.13 Jarvis.py. Press Enter and speak, or type a message.
+
+Wake mode (hands-free): py -3.13 Jarvis.py --wake. Jarvis listens all the time. Say "Jarvis, …" followed by your request, or just "Jarvis" and wait for "Yes, sir?". Note: in wake mode, audio clips from your mic are sent continuously to Google's free speech recognition to listen for the wake word.
+
 You say / type	Jarvis does
 "Open Spotify"	Launches Spotify
 "Go to YouTube"	Opens youtube.com
