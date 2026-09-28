@@ -1,19 +1,21 @@
 """
 J.A.R.V.I.S. - a voice + text personal assistant powered by Claude.
 
-Run:  python jarvis.py
-      Press Enter to speak, or type a message and press Enter.
+Run:  py -3.13 Jarvis.py          Press Enter to speak, or type a message.
+      py -3.13 Jarvis.py --wake   Hands-free: say "Jarvis, ..." to talk to it.
       Say or type "goodbye" to quit.
 """
 
+import argparse
 import os
+import re
 import sys
 
 import anthropic
 from dotenv import load_dotenv
 
 from pc_tools import TOOL_DEFINITIONS, run_tool
-from voice import Voice
+from voice import MicrophoneError, Voice
 
 load_dotenv()
 
@@ -87,7 +89,48 @@ def trim_history(messages: list) -> list:
     return trimmed
 
 
+# "Jarvis, open Spotify" / "Hey Jarvis what time is it". Google sometimes hears
+# "Jarvis" as "Jervis" or "Travis", so accept those too.
+WAKE_WORD = re.compile(r"^(?:hey |hi |ok |okay )?(?:jarvis|jervis|travis)\b[\s,.!?]*(.*)$", re.IGNORECASE)
+
+
+def next_request_push_to_talk(voice: Voice) -> str:
+    """Wait for the user to type a message, or press Enter and speak."""
+    typed = input("\nYou> ").strip()
+    if typed:
+        return typed
+    try:
+        spoken = voice.listen()
+    except MicrophoneError as e:
+        print(f"  [{e} Type your message instead.]")
+        return ""
+    if spoken:
+        print(f"You (spoken)> {spoken}")
+    return spoken
+
+
+def next_request_wake_word(voice: Voice) -> str:
+    """Listen constantly; return what the user says after 'Jarvis'."""
+    while True:
+        heard = voice.listen(timeout=None, quiet=True)
+        match = WAKE_WORD.match(heard.strip())
+        if not match:
+            continue  # not talking to Jarvis - ignore it
+        request = match.group(1).strip()
+        if not request:  # just "Jarvis" - ask what they want
+            voice.say("Yes, sir?")
+            request = voice.listen()
+        if request:
+            print(f"You (spoken)> {request}")
+            return request
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="J.A.R.V.I.S. voice assistant")
+    parser.add_argument("--wake", action="store_true",
+                        help="hands-free mode: always listening, say 'Jarvis' to talk to it")
+    args = parser.parse_args()
+
     if not os.getenv("ANTHROPIC_API_KEY"):
         sys.exit("Missing ANTHROPIC_API_KEY. Copy .env.example to .env and paste your key in it.")
 
@@ -96,15 +139,21 @@ def main() -> None:
     messages: list = []
 
     voice.say("Jarvis online. How can I help, sir?")
-    print("\n(Press Enter to speak, or type a message. Say 'goodbye' to quit.)")
+    if args.wake:
+        print("\n(Wake mode: say 'Jarvis' followed by your request. Say 'Jarvis, goodbye' "
+              "or press Ctrl+C to quit.)")
+        next_request = next_request_wake_word
+    else:
+        print("\n(Press Enter to speak, or type a message. Say 'goodbye' to quit.)")
+        next_request = next_request_push_to_talk
 
     while True:
-        typed = input("\nYou> ").strip()
-        user_text = typed or voice.listen()
+        try:
+            user_text = next_request(voice)
+        except MicrophoneError as e:
+            sys.exit(f"{e} Wake mode needs a microphone.")
         if not user_text:
             continue
-        if not typed:
-            print(f"You (spoken)> {user_text}")
 
         if user_text.lower().strip(" .!") in {"goodbye", "bye", "exit", "quit", "shut down"}:
             voice.say("Goodbye, sir.")
